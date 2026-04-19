@@ -1,12 +1,8 @@
 {
   "name": "urun-arastirma",
-  "version": "2.0.0",
-  "description": "Dropshipping ürün araştırma ve takip sistemi",
+  "version": "3.0.0",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
-  },
+  "scripts": { "start": "node server.js" },
   "dependencies": {
     "better-sqlite3": "^9.4.3",
     "express": "^4.18.2",
