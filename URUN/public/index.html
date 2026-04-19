@@ -421,7 +421,7 @@ function PRow({u,onEdit,onDel,onRefresh}){
   const score=calcScore(uData);
   const fav=uData.link?getFav(uData.link):null;
   const durClr=DURUM_CLR[uData.durum]||"var(--t3)";
-  const rms=uData.rakip_magazalar||[];
+  const rms=Array.isArray(uData.rakip_magazalar)?uData.rakip_magazalar:[];
 
   async function refreshThis(){
     const fresh=await api.get("/api/urunler");
@@ -484,7 +484,7 @@ function PRow({u,onEdit,onDel,onRefresh}){
             ?h("span",{style:{fontSize:13,color:"var(--t3)"}},"Rakip eklenmedi")
             :h("div",{style:{display:"flex",flexDirection:"column",gap:6}},
               ...rms.map((rm,i)=>{
-                const ul=typeof rm.ulkeler==="string"?JSON.parse(rm.ulkeler||"[]"):rm.ulkeler||[];
+                let ul=[];try{const raw=typeof rm.ulkeler==="string"?JSON.parse(rm.ulkeler||"[]"):rm.ulkeler;ul=Array.isArray(raw)?raw:[];}catch(e){ul=[]}
                 const fv=rm.url?getFav(rm.url):null;
                 const dm=rm.url?getDom(rm.url):rm.url;
                 const href=rm.url?(rm.url.startsWith("http")?rm.url:"https://"+rm.url):"#";
