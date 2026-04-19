@@ -72,7 +72,10 @@ db.exec(`
 
 // Varsayılan kullanıcı
 if (db.prepare("SELECT COUNT(*) as c FROM kullanicilar").get().c === 0) {
-  db.prepare("INSERT INTO kullanicilar (isim, renk) VALUES (?,?)").run("Egemen", "#4f7cff");
+  db.prepare("INSERT INTO kullanicilar (isim, renk) VALUES (?,?)").run("Egemen", "#4f7cff"); insert.run("Tuna", "#ff5733");
+  insert.run("Arda", "#33ff57");
+  insert.run("Melisa", "#f333ff");
+  insert.run("TEST Kullanıcısıı", "#ffffff");
 }
 
 // ─── MULTER (Görsel Yükleme) ──────────────────────────────────
