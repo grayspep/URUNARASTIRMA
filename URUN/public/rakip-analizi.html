@@ -26,6 +26,159 @@ if (user) {
   const TIPLER=["Sorun Çözen","Wow Ürün + Hediyelik"];
   const DURUM_O=["Araştırılıyor","Test Aşamasında","Onaylandı","Reddedildi"];
 
+  /* ── YARDIMCI ── */
+  function fmtNum(n){if(!n&&n!==0)return"—";if(n>=1e6)return(n/1e6).toFixed(1)+"M";if(n>=1e3)return(n/1e3).toFixed(1)+"K";return n.toLocaleString("tr-TR");}
+  function fmtTime(s){if(!s)return"—";const m=Math.floor(s/60);const sec=Math.floor(s%60);return m+"d "+sec+"s";}
+  function fmtPct(v){if(v==null)return"—";return(v*100).toFixed(1)+"%";}
+  function countryFlag(code){if(!code||code.length!==2)return"🌍";try{return [...code.toUpperCase()].map(c=>String.fromCodePoint(0x1F1E6+c.charCodeAt(0)-65)).join("");}catch{return"🌍";}}
+
+  /* ── SİMİLARWEB PANELİ ── */
+  function SimilarWebPanel({domain}){
+    const [data,setData]=useState(null);
+    const [loading,setLoading]=useState(false);
+    const [error,setError]=useState("");
+
+    async function fetch_(force){
+      setLoading(true);setError("");
+      if(force) await api.del(`/api/similarweb/${encodeURIComponent(domain)}`);
+      const r=await api.get(`/api/similarweb/${encodeURIComponent(domain)}`);
+      if(r.error)setError(r.error);
+      else setData(r);
+      setLoading(false);
+    }
+
+    if(!data&&!loading&&!error) return h("div",{className:"sw-fetch-area"},
+      h("button",{className:"btn btn-p",onClick:()=>fetch_(false)},"📊 SimilarWeb Analizi Getir"),
+      h("div",{className:"sw-fetch-hint"},"⚡ 4 API çağrısı kullanır · "+domain+" için önbellekte veri varsa ücretsiz")
+    );
+
+    if(loading) return h("div",{className:"sw-loading"},h("div",{className:"ai-spinner"}),h("span",null,"SimilarWeb verisi çekiliyor..."));
+    if(error&&!data) return h("div",{className:"sw-panel"},h("div",{className:"sw-err"},"⚠ "+error),h("button",{className:"btn btn-g btn-s",style:{marginTop:10},onClick:()=>fetch_(false)},"Tekrar Dene"));
+
+    const t=data.traffic,rk=data.rank,sim=data.similar,cnt=data.country;
+
+    /* Ziyaret verileri — en eskiden yeniye sırala */
+    const visits=t?.Visits?Object.entries(t.Visits).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>({
+      lbl:new Date(k).toLocaleDateString("tr-TR",{month:"short",year:"2-digit"}),v
+    })):[];
+    const maxVisit=visits.length?Math.max(...visits.map(x=>x.v)):1;
+
+    /* Trafik kaynakları */
+    const sources=t?.Sources?[
+      {lbl:"Organik Arama",val:t.Sources.Search||0,color:"var(--acc)"},
+      {lbl:"Direkt",val:t.Sources.Direct||0,color:"var(--grn)"},
+      {lbl:"Referral",val:t.Sources.Referrals||0,color:"var(--pur)"},
+      {lbl:"Sosyal Medya",val:t.Sources.Social||0,color:"var(--amb)"},
+      {lbl:"Mail",val:t.Sources.Mail||0,color:"var(--cyn)"},
+      {lbl:"Ücretli",val:t.Sources.PaidReferrals||0,color:"var(--red)"},
+    ].filter(x=>x.val>0).sort((a,b)=>b.val-a.val):[];
+
+    /* Ülke dağılımı */
+    const countries=t?.TopCountryShares?Object.entries(t.TopCountryShares).sort((a,b)=>b[1]-a[1]).slice(0,7):[];
+
+    /* Benzer siteler */
+    const similarSites=sim?.SimilarSites||sim?.similar_sites||
+      (Array.isArray(sim)?sim:[]);
+
+    /* Global rank */
+    const globalRank=rk?.GlobalRank||rk?.global_rank||rk?.Rank||null;
+    const countryRanks=rk?.CountryRank||(Array.isArray(rk?.CountryRanks)?rk.CountryRanks:null);
+
+    return h("div",{className:"sw-panel"},
+      /* Header */
+      h("div",{className:"sw-header"},
+        h("div",{className:"sw-title"},"📊 SimilarWeb — "+domain),
+        h("div",{className:"sw-meta"},
+          data.cached&&h("span",null,"🗄 Önbellekten"),
+          h("span",null,"🕐 "+ago(data.guncelleme)),
+          h("button",{className:"btn btn-g btn-s",onClick:()=>fetch_(true)},"⟳ Yenile (4 API)")
+        )
+      ),
+
+      /* Üst 3 kart */
+      h("div",{className:"sw-grid3"},
+
+        /* Aylık Ziyaretçi */
+        h("div",{className:"sw-card"},
+          h("div",{className:"sw-card-title"},"📈 Aylık Ziyaretçi"),
+          visits.length>0?h("div",null,
+            h("div",{className:"sw-visits-chart"},
+              ...visits.map((v,i)=>h("div",{key:i,className:"sw-visit-bar-wrap"},
+                h("div",{className:"sw-visit-val"},fmtNum(v.v)),
+                h("div",{className:"sw-visit-bar",style:{height:Math.max(8,Math.round((v.v/maxVisit)*68))+"px"}}),
+                h("div",{className:"sw-visit-lbl"},v.lbl)
+              ))
+            )
+          ):h("div",{style:{color:"var(--t3)",fontSize:13}},"Veri yok")
+        ),
+
+        /* Engagement */
+        h("div",{className:"sw-card"},
+          h("div",{className:"sw-card-title"},"💡 Engagement"),
+          t?.Engagement&&h("div",null,
+            h("div",{className:"sw-metric"},h("span",{className:"sw-metric-lbl"},"Bounce Rate"),h("span",{className:"sw-metric-val",style:{color:t.Engagement.BounceRate>.6?"var(--red)":"var(--grn)"}},fmtPct(t.Engagement.BounceRate))),
+            h("div",{className:"sw-metric"},h("span",{className:"sw-metric-lbl"},"Site Süresi"),h("span",{className:"sw-metric-val"},fmtTime(t.Engagement.TimeOnSite))),
+            h("div",{className:"sw-metric"},h("span",{className:"sw-metric-lbl"},"Sayfa/Ziyaret"),h("span",{className:"sw-metric-val"},t.Engagement.PagesPerVisit?.toFixed(1)||"—"))
+          )
+        ),
+
+        /* Rank */
+        h("div",{className:"sw-card"},
+          h("div",{className:"sw-card-title"},"🏆 Sıralama"),
+          globalRank&&h("div",{className:"sw-rank-item"},
+            h("div",{className:"sw-rank-big"},"#"+fmtNum(globalRank)),
+            h("div",{className:"sw-rank-lbl"},"Global Sıralama")
+          ),
+          countryRanks&&h("div",{style:{marginTop:10}},
+            Array.isArray(countryRanks)
+              ?countryRanks.slice(0,3).map((cr,i)=>h("div",{key:i,className:"sw-metric"},
+                  h("span",{className:"sw-metric-lbl"},countryFlag(cr.Country||cr.country)+" "+(cr.Country||cr.country)),
+                  h("span",{className:"sw-metric-val"},"#"+fmtNum(cr.Rank||cr.rank))
+                ))
+              :h("div",{className:"sw-metric"},
+                  h("span",{className:"sw-metric-lbl"},countryFlag(countryRanks.Country)+" "+countryRanks.Country),
+                  h("span",{className:"sw-metric-val"},"#"+fmtNum(countryRanks.Rank))
+                )
+          ),
+          !globalRank&&!countryRanks&&h("div",{style:{color:"var(--t3)",fontSize:13}},"Veri yok")
+        )
+      ),
+
+      h("hr",{className:"sw-divider"}),
+
+      /* Trafik Kaynakları */
+      sources.length>0&&h("div",{className:"sw-section"},
+        h("div",{className:"sw-section-title"},"🔀 Trafik Kaynakları"),
+        ...sources.map((s,i)=>h("div",{key:i,className:"sw-bar-row"},
+          h("div",{className:"sw-bar-lbl"},s.lbl),
+          h("div",{className:"sw-bar-track"},h("div",{className:"sw-bar-fill",style:{width:fmtPct(s.val),background:s.color}})),
+          h("div",{className:"sw-bar-pct"},fmtPct(s.val))
+        ))
+      ),
+
+      /* Ülke Dağılımı */
+      countries.length>0&&h("div",{className:"sw-section"},
+        h("div",{className:"sw-section-title"},"🌍 Ülke Dağılımı"),
+        ...countries.map(([code,share],i)=>h("div",{key:i,className:"sw-bar-row"},
+          h("div",{className:"sw-bar-lbl"},countryFlag(code)+" "+code),
+          h("div",{className:"sw-bar-track"},h("div",{className:"sw-bar-fill",style:{width:fmtPct(share),background:"var(--pur)"}})),
+          h("div",{className:"sw-bar-pct"},fmtPct(share))
+        ))
+      ),
+
+      /* Benzer Siteler */
+      similarSites.length>0&&h("div",{className:"sw-section"},
+        h("div",{className:"sw-section-title"},"🔗 Benzer Siteler"),
+        h("div",{className:"sw-similar-chips"},
+          ...similarSites.slice(0,12).map((s,i)=>{
+            const domain2=s?.Domain||s?.domain||s||"";
+            return h("a",{key:i,href:"https://"+domain2,target:"_blank",rel:"noreferrer",className:"sw-similar-chip"},domain2);
+          })
+        )
+      )
+    );
+  }
+
   // Quick-add modal for adding a Shopify product to our list
   function QuickAddModal({urun, siteUrl, onClose, onSave}){
     const [f,setF]=useState({
@@ -108,6 +261,7 @@ if (user) {
 
   function SiteCard({site, onDelete, onRefresh, onAddClick}){
     const [open,setOpen]=useState(false);
+    const [tab,setTab]=useState("urunler");
     const [refreshing,setRefreshing]=useState(false);
     const [search,setSearch]=useState("");
     const urunler=site.urunler||[];
@@ -125,6 +279,7 @@ if (user) {
     const fav=`https://www.google.com/s2/favicons?domain=${site.url}&sz=64`;
 
     return h("div",{className:"site-card"},
+      /* Site başlık satırı */
       h("div",{className:"site-header",onClick:()=>setOpen(p=>!p)},
         h("div",{className:"site-fav"},h("img",{src:fav,alt:"",onError:e=>{e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%23252a35'/%3E%3C/svg%3E"}})),
         h("div",{className:"site-info"},
@@ -140,17 +295,30 @@ if (user) {
           h("button",{className:"site-expand-btn"+(open?" open":""),onClick:e=>{e.stopPropagation();setOpen(p=>!p)}},"▾")
         )
       ),
+
+      /* Açılınca: Tab bar + içerik */
       open&&h("div",null,
-        urunler.length>0&&h("div",{style:{padding:"0 20px 12px",display:"flex",gap:8,alignItems:"center"}},
-          h("div",{style:{position:"relative",flex:1}},
-            h("span",{style:{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"var(--t3)",pointerEvents:"none"}},"🔍"),
-            h("input",{style:{width:"100%",background:"var(--bg3)",border:"1px solid var(--b1)",borderRadius:"var(--r)",padding:"8px 12px 8px 32px",color:"var(--t1)",fontSize:13,fontFamily:"inherit"},placeholder:`${urunler.length} ürün içinde ara...`,value:search,onChange:e=>setSearch(e.target.value)})
-          ),
-          h("span",{style:{fontSize:12,color:"var(--t3)",whiteSpace:"nowrap"}},filtered.length+" sonuç")
+        h("div",{className:"tab-bar"},
+          h("button",{className:"tab-btn"+(tab==="urunler"?" on":""),onClick:()=>setTab("urunler")},"📦 Ürünler ("+urunler.length+")"),
+          h("button",{className:"tab-btn"+(tab==="sw"?" on":""),onClick:()=>setTab("sw")},"📊 SimilarWeb")
         ),
-        filtered.length===0
-          ?h("div",{style:{textAlign:"center",padding:"2rem",color:"var(--t3)",fontSize:13}},search?"Sonuç bulunamadı":"Bu sitede ürün yok")
-          :h("div",{className:"urun-grid"},...filtered.map(u=>h(UrunCard,{key:u.id,urun:u,siteUrl:site.url,onAddClick})))
+
+        /* Ürünler tab */
+        tab==="urunler"&&h("div",null,
+          urunler.length>0&&h("div",{style:{padding:"12px 20px",display:"flex",gap:8,alignItems:"center"}},
+            h("div",{style:{position:"relative",flex:1}},
+              h("span",{style:{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"var(--t3)",pointerEvents:"none"}},"🔍"),
+              h("input",{style:{width:"100%",background:"var(--bg3)",border:"1px solid var(--b1)",borderRadius:"var(--r)",padding:"8px 12px 8px 32px",color:"var(--t1)",fontSize:13,fontFamily:"inherit"},placeholder:`${urunler.length} ürün içinde ara...`,value:search,onChange:e=>setSearch(e.target.value)})
+            ),
+            h("span",{style:{fontSize:12,color:"var(--t3)",whiteSpace:"nowrap"}},filtered.length+" sonuç")
+          ),
+          filtered.length===0
+            ?h("div",{style:{textAlign:"center",padding:"2rem",color:"var(--t3)",fontSize:13}},search?"Sonuç bulunamadı":"Bu sitede ürün yok")
+            :h("div",{className:"urun-grid",style:{padding:"0 20px 20px"}},...filtered.map(u=>h(UrunCard,{key:u.id,urun:u,siteUrl:site.url,onAddClick})))
+        ),
+
+        /* SimilarWeb tab */
+        tab==="sw"&&h(SimilarWebPanel,{domain:site.url})
       )
     );
   }

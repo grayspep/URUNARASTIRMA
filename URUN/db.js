@@ -91,6 +91,16 @@ db.exec(`
     created_at   TEXT,
     updated_at   TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS similarweb_cache (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain       TEXT NOT NULL UNIQUE,
+    traffic_data TEXT,
+    rank_data    TEXT,
+    similar_data TEXT,
+    country_data TEXT,
+    guncelleme   DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Migrasyonlar — eski DB'lere yeni sütunlar

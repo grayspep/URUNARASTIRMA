@@ -7,6 +7,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+
+// Kök yönlendirme — static'ten ÖNCE olmalı
+app.get("/", (req, res) => res.redirect("/giris"));
+
 app.use(express.static(path.join(__dirname, "public")));
 
 // ─── API ROUTES ───────────────────────────────────────────────
@@ -14,6 +18,7 @@ app.use("/api/urunler",          require("./routes/urunler"));
 app.use("/api/urunler/:urun_id/gorseller", uploadRouter);
 app.use("/api/gorseller",        deleteRouter);
 app.use("/api/rakip-magazalar",  require("./routes/rakip-magazalar"));
+app.use("/api/similarweb",       require("./routes/similarweb"));
 app.use("/api/stats",            require("./routes/stats"));
 app.use("/api/kullanicilar",     require("./routes/kullanicilar"));
 
