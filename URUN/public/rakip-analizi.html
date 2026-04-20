@@ -8,9 +8,8 @@
 </head>
 <body>
 <button class="hamburger" id="ham">☰</button>
-<div id="nav-root"></div>
 <div class="app">
-  <div></div>
+  <div id="nav-root"></div>
   <main class="main" id="root"></main>
 </div>
 
@@ -77,8 +76,7 @@ if (user) {
     );
   }
 
-  function UrunCard({urun, siteUrl, onAdd}){
-    const [showAdd,setShowAdd]=useState(false);
+  function UrunCard({urun, siteUrl, onAddClick}){
     const fiyatNum=parseFloat(urun.fiyat);
     const compareNum=parseFloat(urun.compare_fiyat);
     const hasDiscount=compareNum&&compareNum>fiyatNum;
@@ -103,13 +101,12 @@ if (user) {
           h("span",null,"🔄 "+fmtDate(urun.updated_at))
         ),
         tags.length>0&&h("div",{className:"urun-tags"},...tags.map(t=>h("span",{key:t,className:"urun-tag"},t))),
-        h("button",{className:"urun-add-btn",onClick:()=>setShowAdd(true)},"+ Araştırma Listesine Ekle")
-      ),
-      showAdd&&h(QuickAddModal,{urun,siteUrl,onClose:()=>setShowAdd(false),onSave:async f=>{await api.post("/api/urunler",f);setShowAdd(false);}})
+        h("button",{className:"urun-add-btn",onClick:()=>onAddClick(urun,siteUrl)},"+ Araştırma Listesine Ekle")
+      )
     );
   }
 
-  function SiteCard({site, onDelete, onRefresh}){
+  function SiteCard({site, onDelete, onRefresh, onAddClick}){
     const [open,setOpen]=useState(false);
     const [refreshing,setRefreshing]=useState(false);
     const [search,setSearch]=useState("");
@@ -153,7 +150,7 @@ if (user) {
         ),
         filtered.length===0
           ?h("div",{style:{textAlign:"center",padding:"2rem",color:"var(--t3)",fontSize:13}},search?"Sonuç bulunamadı":"Bu sitede ürün yok")
-          :h("div",{className:"urun-grid"},...filtered.map(u=>h(UrunCard,{key:u.id,urun:u,siteUrl:site.url})))
+          :h("div",{className:"urun-grid"},...filtered.map(u=>h(UrunCard,{key:u.id,urun:u,siteUrl:site.url,onAddClick})))
       )
     );
   }
@@ -164,6 +161,7 @@ if (user) {
     const [fetching,setFetching]=useState(false);
     const [url,setUrl]=useState("");
     const [error,setError]=useState("");
+    const [quickAdd,setQuickAdd]=useState(null); // {urun, siteUrl}
     const inputRef=useRef();
 
     async function load(){
@@ -189,6 +187,8 @@ if (user) {
       setSiteler(siteler.filter(s=>s.id!==id));
     }
 
+    function handleAddClick(urun, siteUrl){ setQuickAdd({urun, siteUrl}); }
+
     const totalUrunler=siteler.reduce((s,x)=>s+(x.urun_sayisi||0),0);
 
     return h("div",null,
@@ -199,14 +199,12 @@ if (user) {
         )
       ),
 
-      // Stats
       siteler.length>0&&h("div",{className:"sg",style:{gridTemplateColumns:"repeat(3,1fr)"}},
         h("div",{className:"sc"},h("div",{className:"slbl"},"Takip Edilen"),h("div",{className:"sval"},siteler.length),h("div",{className:"ssub"},"mağaza")),
         h("div",{className:"sc ac"},h("div",{className:"slbl"},"Toplam Ürün"),h("div",{className:"sval"},totalUrunler),h("div",{className:"ssub"},"keşfedildi")),
         h("div",{className:"sc gr"},h("div",{className:"slbl"},"Son Güncelleme"),h("div",{className:"sval",style:{fontSize:18}},siteler[0]?ago(siteler[0].son_cekme):"—"),h("div",{className:"ssub"},"en son çekim"))
       ),
 
-      // Search bar
       h("div",{style:{marginBottom:"1.5rem"}},
         h("div",{className:"rak-search"},
           h("span",{className:"rak-input-icon"},"🌐"),
@@ -217,14 +215,21 @@ if (user) {
         h("div",{style:{fontSize:12,color:"var(--t3)",marginTop:8}},"Shopify kullanan herhangi bir mağazanın URL'sini gir (örn: velskn.com, gymshark.com)")
       ),
 
-      // Sites list
       loading?h("div",{style:{textAlign:"center",padding:"4rem",color:"var(--t3)"}},"Yükleniyor..."):
       siteler.length===0?h("div",{className:"empty"},
         h("div",{className:"empty-ico"},"🕵️"),
         h("h3",null,"Henüz analiz yapılmadı"),
         h("p",null,"Yukarıya bir Shopify mağaza URL'si gir ve Analiz Et'e bas")
       ):
-      h("div",null,...siteler.map(s=>h(SiteCard,{key:s.id,site:s,onDelete:delSite,onRefresh:load})))
+      h("div",null,...siteler.map(s=>h(SiteCard,{key:s.id,site:s,onDelete:delSite,onRefresh:load,onAddClick:handleAddClick}))),
+
+      // Modal App seviyesinde — transform sorununu çözer
+      quickAdd&&h(QuickAddModal,{
+        urun:quickAdd.urun,
+        siteUrl:quickAdd.siteUrl,
+        onClose:()=>setQuickAdd(null),
+        onSave:async f=>{await api.post("/api/urunler",f);setQuickAdd(null);}
+      })
     );
   }
 

@@ -36,6 +36,7 @@ body{background:var(--bg);color:var(--t1);font-family:system-ui,-apple-system,sa
 
 /* ── LAYOUT ── */
 .app{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+#nav-root{position:relative;}
 .hamburger{display:none;position:fixed;top:14px;left:14px;z-index:200;background:var(--bg2);border:1px solid var(--b2);border-radius:var(--r);padding:9px 12px;cursor:pointer;color:var(--t1);font-size:20px;align-items:center;justify-content:center}
 .sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99}
 
