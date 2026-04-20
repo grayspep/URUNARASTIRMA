@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>XCOMMERCE — Giriş</title>
+<link rel="stylesheet" href="/main.css"/>
+</head>
+<body>
+<div class="auth-wrap" id="auth"></div>
+<script src="/nav.js"></script>
+<script>
+// Zaten giriş yapmışsa yönlendir
+if (getUser()) window.location.href = "/liste";
+
+let step = "pass";
+let kullanicilar = [];
+let selKul = null;
+
+function render() {
+  const el = document.getElementById("auth");
+  if (step === "pass") {
+    el.innerHTML = `
+      <div class="auth-box">
+        <div class="auth-logo"><span>X</span>COMMERCE</div>
+        <div class="auth-sub">Devam etmek için şifreyi gir</div>
+        <label class="auth-label">Şifre</label>
+        <input class="auth-inp" type="password" id="pass-inp" placeholder="••••••••" autofocus/>
+        <div id="err"></div>
+        <button class="auth-btn" onclick="checkPass()">Giriş Yap →</button>
+      </div>
+    `;
+    document.getElementById("pass-inp").addEventListener("keydown", e => { if (e.key === "Enter") checkPass(); });
+  } else {
+    el.innerHTML = `
+      <div class="auth-box">
+        <div class="auth-logo"><span>X</span>COMMERCE</div>
+        <div class="auth-sub">Kullanıcını seç</div>
+        <div class="ulist" id="ulist">
+          ${kullanicilar.map(k => `
+            <div class="uitem${selKul?.id===k.id?" sel":""}" onclick="selectUser(${k.id})">
+              <div class="u-dot" style="background:${k.renk||"#4f7cff"}">${initials(k.isim)}</div>
+              <div class="u-name">${k.isim}</div>
+            </div>
+          `).join("")}
+        </div>
+        <button class="auth-btn" onclick="doLogin()">${selKul ? selKul.isim + " olarak giriş yap →" : "Kullanıcı seç"}</button>
+      </div>
+    `;
+  }
+}
+
+async function checkPass() {
+  const val = document.getElementById("pass-inp").value;
+  if (val === APP_PASS) {
+    kullanicilar = await api.get("/api/kullanicilar");
+    step = "user";
+    render();
+  } else {
+    document.getElementById("err").innerHTML = `<div class="auth-err">Hatalı şifre, tekrar dene.</div>`;
+  }
+}
+
+function selectUser(id) {
+  selKul = kullanicilar.find(k => k.id === id) || null;
+  render();
+}
+
+function doLogin() {
+  if (!selKul) { alert("Kullanıcı seç"); return; }
+  setUser(selKul);
+  window.location.href = "/liste";
+}
+
+render();
+</script>
+</body>
+</html>

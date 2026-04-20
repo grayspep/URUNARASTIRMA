@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>XCOMMERCE — İstatistikler</title>
+<link rel="stylesheet" href="/main.css"/>
+</head>
+<body>
+<button class="hamburger" id="ham">☰</button>
+<div id="nav-root"></div>
+<div class="app">
+  <div></div>
+  <main class="main" id="root"></main>
+</div>
+<script src="/nav.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+const user = requireAuth();
+if (user) {
+  renderSidebar();
+  const {useState,useEffect} = React, h = React.createElement;
+  const DURUM_CLR={"Araştırılıyor":"var(--amb)","Test Aşamasında":"var(--acc)","Onaylandı":"var(--grn)","Reddedildi":"var(--red)"};
+  const DURUM_O=["Araştırılıyor","Test Aşamasında","Onaylandı","Reddedildi"];
+
+  function BarChart({items, total, colorFn}){
+    return h("div",null,...items.map(x=>h("div",{key:x.label,className:"brow"},
+      h("div",{className:"blbl"},x.label),
+      h("div",{className:"btrk"},h("div",{className:"bfil",style:{width:total?Math.round(x.c/total*100)+"%":"0%",background:colorFn?colorFn(x.label):"var(--acc)"}})),
+      h("div",{className:"bcnt"},x.c)
+    )));
+  }
+
+  function App(){
+    const [st,setSt]=useState(null);
+    useEffect(()=>{api.get("/api/stats").then(setSt);},[]);
+    if(!st) return h("div",{style:{textAlign:"center",padding:"4rem",color:"var(--t3)"}},"Yükleniyor...");
+
+    return h("div",null,
+      h("div",{className:"ph"},h("div",null,h("div",{className:"ptit"},"İstatistikler"),h("div",{className:"psub"},"Araştırma verileri özeti"))),
+      h("div",{className:"sg"},
+        h("div",{className:"sc"},h("div",{className:"slbl"},"Toplam Ürün"),h("div",{className:"sval"},st.total),h("div",{className:"ssub"},"araştırılan")),
+        h("div",{className:"sc ac"},h("div",{className:"slbl"},"Ort. Skor"),h("div",{className:"sval"},st.avg_score),h("div",{className:"ssub"},"/100")),
+        h("div",{className:"sc gr"},h("div",{className:"slbl"},"Onaylanan"),h("div",{className:"sval"},st.onaylanan),h("div",{className:"ssub"},"satışa geçti")),
+        h("div",{className:"sc am"},h("div",{className:"slbl"},"1:6 Uygun"),h("div",{className:"sval"},st.breakeven_evet),h("div",{className:"ssub"},"kârlı aday"))
+      ),
+      h("div",{className:"sg",style:{gridTemplateColumns:"1fr 1fr"}},
+        h("div",{className:"sc pu"},h("div",{className:"slbl"},"Rakip Mağaza"),h("div",{className:"sval"},st.rakip_siteler),h("div",{className:"ssub"},"analiz edildi")),
+        h("div",{className:"sc"},h("div",{className:"slbl"},"Rakip Ürün"),h("div",{className:"sval"},st.rakip_urunler),h("div",{className:"ssub"},"keşfedildi"))
+      ),
+      h("div",{className:"cg"},
+        h("div",{className:"ccard"},h("div",{className:"cctit"},"Niş Dağılımı"),h(BarChart,{items:(st.nis_dagilim||[]).map(x=>({label:x.nis,c:x.c})),total:st.total})),
+        h("div",{className:"ccard"},h("div",{className:"cctit"},"Durum Dağılımı"),h(BarChart,{items:DURUM_O.map(d=>{const x=(st.durum_dagilim||[]).find(r=>r.durum===d)||{c:0};return{label:d,c:x.c};}),total:st.total,colorFn:d=>DURUM_CLR[d]||"var(--acc)"})),
+        h("div",{className:"ccard"},h("div",{className:"cctit"},"Ürün Tipi"),h(BarChart,{items:(st.tip_dagilim||[]).map(x=>({label:x.tip,c:x.c})),total:st.total})),
+        h("div",{className:"ccard"},h("div",{className:"cctit"},"Fiyat Dağılımı"),h(BarChart,{items:(st.fiyat_dagilim||[]).map(x=>({label:x.fiyat,c:x.c})),total:st.total,colorFn:()=>"var(--grn)"}))
+      )
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+}
+</script>
+</body>
+</html>

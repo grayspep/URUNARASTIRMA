@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>XCOMMERCE — Ürün Listesi</title>
+<link rel="stylesheet" href="/main.css"/>
+</head>
+<body>
+<button class="hamburger" id="ham">☰</button>
+<div id="nav-root"></div>
+<div class="app">
+  <div></div><!-- sidebar placeholder -->
+  <main class="main" id="root"></main>
+</div>
+
+<script src="/nav.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+const user = requireAuth();
+if (user) {
+  renderSidebar();
+  const {useState,useEffect,useRef} = React, h = React.createElement;
+  const NISLER=["Hobi","Sağlık","Bebek & Anne","Mutfak","Güzellik","Kadın","Araba & Motor","Ev & Dekor","Spor","Teknoloji","Evcil Hayvan"];
+  const TIPLER=["Sorun Çözen","Wow Ürün + Hediyelik"];
+  const FOMO_O=["Evet","Hayır","Bilinmiyor"];
+  const RAKIP_O=["1 Aydan Kısa","3 Aydan Kısa","6 Aydan Uzun"];
+  const KREATIF_O=["Video ve Görsel Kreatif Var","Sadece Görsel Kreatif Var"];
+  const BE_O=["Evet","Hayır","Bilinmiyor"];
+  const FIYAT_O=["1200'den Az","2000'den Az","2000'den Fazla","3750'den Fazla"];
+  const DURUM_O=["Araştırılıyor","Test Aşamasında","Onaylandı","Reddedildi"];
+  const KAYNAK_O=["AliExpress","CJDropshipping","Zendrop","Spocket","Alibaba","Diğer"];
+  const PARA_O=["USD","EUR","TRY"];
+  const DURUM_CLR={"Araştırılıyor":"var(--amb)","Test Aşamasında":"var(--acc)","Onaylandı":"var(--grn)","Reddedildi":"var(--red)"};
+  const ULKELER=[{kod:"TR",ad:"Türkiye",flag:"🇹🇷"},{kod:"CH",ad:"İsviçre",flag:"🇨🇭"},{kod:"PL",ad:"Polonya",flag:"🇵🇱"},{kod:"DE",ad:"Almanya",flag:"🇩🇪"},{kod:"FR",ad:"Fransa",flag:"🇫🇷"},{kod:"GB",ad:"İngiltere",flag:"🇬🇧"},{kod:"US",ad:"Amerika",flag:"🇺🇸"},{kod:"AU",ad:"Avustralya",flag:"🇦🇺"},{kod:"NL",ad:"Hollanda",flag:"🇳🇱"},{kod:"BE",ad:"Belçika",flag:"🇧🇪"},{kod:"AT",ad:"Avusturya",flag:"🇦🇹"},{kod:"SE",ad:"İsveç",flag:"🇸🇪"},{kod:"ES",ad:"İspanya",flag:"🇪🇸"},{kod:"IT",ad:"İtalya",flag:"🇮🇹"},{kod:"AE",ad:"BAE",flag:"🇦🇪"}];
+  const E0={urun:"",link:"",tedarik_link:"",gorsel:"",nis:"",tip:"",durum:"Araştırılıyor",kaynak:"",fomo:"",rakip:"",kreatif:"",breakeven:"",fiyat:"",para_birimi:"USD",satis_fiyat:"",alis_fiyat:"",notlar:"",rakip_magazalar:[]};
+
+  function calcScore(u){let s=0;if(u.fomo==="Evet")s+=25;if(u.breakeven==="Evet")s+=25;if(u.kreatif==="Video ve Görsel Kreatif Var")s+=20;if(u.rakip==="1 Aydan Kısa")s+=30;else if(u.rakip==="3 Aydan Kısa")s+=15;return s;}
+  function scoreClr(s){return s>=70?"var(--grn)":s>=40?"var(--amb)":"var(--red)";}
+  function getFav(url){try{return`https://www.google.com/s2/favicons?domain=${new URL(url.startsWith("http")?url:"https://"+url).hostname}&sz=32`}catch{return null}}
+  function getDom(url){try{return new URL(url.startsWith("http")?url:"https://"+url).hostname.replace("www.","")}catch{return url}}
+
+  function bdg(val,sm){
+    if(!val)return h("span",{style:{color:"var(--t3)",fontSize:12}},"—");
+    const g=["Evet","1 Aydan Kısa","3 Aydan Kısa","Video ve Görsel Kreatif Var","2000'den Fazla","3750'den Fazla","Sorun Çözen","Onaylandı"];
+    const r=["6 Aydan Uzun","Hayır","1200'den Az","Reddedildi"];
+    const a=["Bilinmiyor","Sadece Görsel Kreatif Var","2000'den Az","Araştırılıyor"];
+    const p=["Wow Ürün + Hediyelik"];const c=["Test Aşamasında"];
+    const cls=g.includes(val)?"bg":r.includes(val)?"br":a.includes(val)?"ba":p.includes(val)?"bp":c.includes(val)?"bc":"bn";
+    return h("span",{className:"bdg "+cls,style:sm?{fontSize:11,padding:"2px 6px"}:{}},val);
+  }
+
+  function RakipEditor({value,onChange}){
+    const list=Array.isArray(value)?value:[];
+    const add=()=>onChange([...list,{url:"",ulkeler:[],notlar:""}]);
+    const rem=i=>onChange(list.filter((_,j)=>j!==i));
+    const upd=(i,k,v)=>onChange(list.map((x,j)=>j===i?{...x,[k]:v}:x));
+    const tog=(i,kod)=>{const c=list[i].ulkeler||[];upd(i,"ulkeler",c.includes(kod)?c.filter(u=>u!==kod):[...c,kod]);};
+    return h("div",null,
+      h("div",{className:"rm-list"},...list.map((rm,i)=>h("div",{key:i,className:"rm-item"},
+        h("div",{className:"rm-row1"},h("input",{className:"fc",value:rm.url||"",onChange:e=>upd(i,"url",e.target.value),placeholder:"skinlove.com"}),h("button",{className:"btn btn-d btn-s",onClick:()=>rem(i)},"✕")),
+        h("div",{style:{fontSize:11,color:"var(--t3)",marginBottom:6,fontWeight:700,textTransform:"uppercase"}},"Hedef Pazarlar"),
+        h("div",{className:"rm-flags"},...ULKELER.map(u=>h("label",{key:u.kod,className:"rm-flag-cb"+((rm.ulkeler||[]).includes(u.kod)?" sel":"")},h("input",{type:"checkbox",checked:(rm.ulkeler||[]).includes(u.kod),onChange:()=>tog(i,u.kod)}),u.flag," ",u.ad))),
+        h("input",{className:"fc",style:{marginTop:8,fontSize:12},value:rm.notlar||"",onChange:e=>upd(i,"notlar",e.target.value),placeholder:"Not (opsiyonel)"})
+      ))),
+      h("button",{className:"rm-add",onClick:add},"+ Rakip Mağaza Ekle")
+    );
+  }
+
+  function GorselUploader({urunId,gorseller,onRefresh}){
+    const [drag,setDrag]=useState(false);const [uploading,setUploading]=useState(false);const [lb,setLb]=useState(null);const ref=useRef();
+    async function upload(files){if(!files?.length)return;setUploading(true);const fd=new FormData();Array.from(files).forEach(f=>fd.append("gorseller",f));await fetch(`/api/urunler/${urunId}/gorseller`,{method:"POST",body:fd});setUploading(false);onRefresh();}
+    async function delG(gid,e){e.stopPropagation();if(!confirm("Görsel silinsin mi?"))return;await api.del(`/api/gorseller/${gid}`);onRefresh();}
+    return h("div",null,
+      h("div",{className:"dtit",style:{marginTop:12}},"📸 Analiz Görselleri"),
+      gorseller?.length>0&&h("div",{className:"gallery-grid"},...gorseller.map(g=>h("div",{key:g.id,className:"gthumb",onClick:()=>setLb("/uploads/"+g.dosya_adi)},h("img",{src:"/uploads/"+g.dosya_adi,alt:"",loading:"lazy"}),h("button",{className:"gthumb-del",onClick:e=>delG(g.id,e)},"✕")))),
+      h("div",{className:"upload-zone"+(drag?" drag":""),onDragOver:e=>{e.preventDefault();setDrag(true)},onDragLeave:()=>setDrag(false),onDrop:e=>{e.preventDefault();setDrag(false);upload(e.dataTransfer.files)},onClick:()=>ref.current.click()},
+        h("input",{ref,type:"file",accept:"image/*",multiple:true,onChange:e=>upload(e.target.files)}),
+        h("div",{className:"upload-text"},uploading?"Yükleniyor...":h("span",null,"📎 SimilarWeb / analiz görseli yükle"))
+      ),
+      lb&&h("div",{className:"lb",onClick:()=>setLb(null)},h("img",{src:lb,alt:""}))
+    );
+  }
+
+  function AiAnaliz({u,onUpdate}){
+    const [loading,setLoading]=useState(false);const [error,setError]=useState("");
+    async function generate(){setLoading(true);setError("");try{const r=await fetch(`/api/urunler/${u.id}/analiz`,{method:"POST"});const d=await r.json();if(d.error)setError(d.error);else onUpdate();}catch(e){setError("Bağlantı hatası: "+e.message);}setLoading(false);}
+    return h("div",{className:"ai-section"},
+      h("div",{className:"ai-header"},
+        h("div",{className:"ai-title"},"✦ EGEMEN AI Ne Diyor?"),
+        h("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}},
+          u.ai_tarih&&h("span",{className:"ai-date"},"Son: "+ago(u.ai_tarih)),
+          loading?h("div",{className:"btn btn-ai btn-s",style:{cursor:"default"}},"Analiz yapılıyor..."):h("button",{className:"btn btn-ai btn-s",onClick:generate},u.ai_analiz?"🔄 Yeniden":"✦ Analiz Oluştur")
+        )
+      ),
+      error&&h("div",{className:"ai-error",style:{color:"var(--red)",fontSize:"var(--fs-sm)",background:"var(--red-b)",borderRadius:"var(--r)",padding:"10px 14px",marginBottom:10}},"⚠ "+error),
+      loading&&h("div",{className:"ai-loading"},h("div",{className:"ai-spinner"}),h("span",null,"Claude analiz yapıyor...")),
+      !loading&&!u.ai_analiz&&!error&&h("div",{className:"ai-empty"},h("div",{style:{fontSize:28}},"✦"),h("p",null,"Analiz oluşturmak için butona tıkla.")),
+      !loading&&u.ai_analiz&&h("div",{className:"ai-box"},u.ai_analiz)
+    );
+  }
+
+  function PRow({u,onEdit,onDel,onRefresh}){
+    const [open,setOpen]=useState(false);const [uData,setUData]=useState(u);
+    const score=calcScore(uData);const fav=uData.link?getFav(uData.link):null;const durClr=DURUM_CLR[uData.durum]||"var(--t3)";
+    const rms=Array.isArray(uData.rakip_magazalar)?uData.rakip_magazalar:[];
+    async function refreshThis(){const fresh=await api.get("/api/urunler");const f=fresh.find(x=>x.id===u.id);if(f)setUData(f);onRefresh();}
+    const thumb=uData.gorsel?h("img",{src:uData.gorsel,alt:"",onError:e=>{e.target.style.display="none"}}):fav?h("img",{src:fav,alt:"",style:{width:22,height:22,borderRadius:3},onError:e=>{e.target.style.display="none"}}):h("span",null,uData.nis==="Sağlık"?"💊":uData.nis==="Mutfak"?"🍳":uData.nis==="Güzellik"?"💄":uData.nis==="Bebek & Anne"?"👶":uData.nis==="Araba & Motor"?"🚗":"📦");
+    const fiyatG=uData.satis_fiyat?`${uData.satis_fiyat} ${uData.para_birimi||"USD"}`:null;
+    return h("div",{className:"prow"},
+      h("div",{className:"mrow"+(open?" open":""),onClick:()=>setOpen(p=>!p)},
+        h("button",{className:"xbtn2"+(open?" open":""),onClick:e=>{e.stopPropagation();setOpen(p=>!p)}},"▾"),
+        h("div",{className:"pimg"},thumb),
+        h("div",{className:"pname"},h("div",{className:"pname-t"},uData.urun||"—"),h("div",{className:"pname-s"},uData.durum&&h("span",{style:{display:"flex",alignItems:"center",gap:4}},h("span",{className:"sdot",style:{background:durClr}}),uData.durum),fiyatG&&h("span",{style:{color:"var(--grn)",fontWeight:600}},fiyatG),uData.kaynak&&h("span",{style:{color:"var(--t3)"}},"· "+uData.kaynak))),
+        h("div",{className:"cc"},h("span",{style:{fontSize:12,color:"var(--t2)",textAlign:"center"}},uData.nis||"—")),
+        h("div",{className:"cc"},bdg(uData.tip,true)),
+        h("div",{style:{display:"flex",flexDirection:"column",gap:3,alignItems:"center"}},bdg(uData.fomo,true),bdg(uData.rakip,true)),
+        h("div",{className:"cc"},bdg(uData.breakeven,true)),
+        h("div",{className:"cc"},bdg(uData.fiyat,true)),
+        h("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",gap:1}},h("div",{className:"scnum",style:{color:scoreClr(score)}},score),h("div",{className:"sclbl"},"puan"))
+      ),
+      open&&h("div",{className:"detail"},h("div",{className:"detail-grid"},
+        h("div",{className:"ds"},
+          h("div",{className:"dtit"},"📊 Analiz"),
+          h("div",{className:"drow"},h("span",{className:"dk"},"FOMO"),bdg(uData.fomo)),
+          h("div",{className:"drow"},h("span",{className:"dk"},"Rakip Süre"),bdg(uData.rakip)),
+          h("div",{className:"drow"},h("span",{className:"dk"},"Kreatif"),bdg(uData.kreatif)),
+          h("div",{className:"drow"},h("span",{className:"dk"},"1:6 Breakeven"),bdg(uData.breakeven)),
+          uData.satis_fiyat&&h("div",{className:"drow"},h("span",{className:"dk"},"Satış"),h("span",{className:"dv",style:{color:"var(--grn)",fontWeight:600}},uData.satis_fiyat+" "+(uData.para_birimi||"USD"))),
+          uData.alis_fiyat&&h("div",{className:"drow"},h("span",{className:"dk"},"Alış"),h("span",{className:"dv"},uData.alis_fiyat+" "+(uData.para_birimi||"USD"))),
+          h("div",{style:{marginTop:8}}),
+          h("div",{className:"dk",style:{marginBottom:5}},"Skor"),
+          h("div",{style:{display:"flex",alignItems:"center",gap:9}},h("div",{className:"sbar-wrap"},h("div",{className:"sbar",style:{width:score+"%",background:scoreClr(score)}})),h("span",{style:{fontSize:13,fontWeight:700,color:scoreClr(score),minWidth:32}},score+"/100")),
+          h("div",{style:{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}},
+            uData.link&&h("a",{href:uData.link,target:"_blank",rel:"noreferrer",className:"btn btn-g btn-s",style:{textDecoration:"none",fontSize:12}},"→ Reklam"),
+            uData.tedarik_link&&h("a",{href:uData.tedarik_link.startsWith("http")?uData.tedarik_link:"https://"+uData.tedarik_link,target:"_blank",rel:"noreferrer",className:"btn btn-cyn btn-s",style:{textDecoration:"none",fontSize:12}},"🛒 Tedarikçi")
+          )
+        ),
+        h("div",{className:"ds"},
+          h("div",{className:"dtit"},"🏪 Rakip Mağazalar"),
+          rms.length===0?h("span",{style:{fontSize:13,color:"var(--t3)"}},"Rakip eklenmedi"):
+          h("div",{style:{display:"flex",flexDirection:"column",gap:6}},...rms.map((rm,i)=>{
+            let ul=[];try{const p=JSON.parse(rm.ulkeler||"[]");ul=Array.isArray(p)?p:[];}catch(e){}
+            const fv=rm.url?getFav(rm.url):null;const dm=rm.url?getDom(rm.url):rm.url;
+            const href=rm.url?(rm.url.startsWith("http")?rm.url:"https://"+rm.url):"#";
+            return h("a",{key:i,href,target:"_blank",rel:"noreferrer",className:"comp-chip"},
+              h("div",{className:"comp-top"},fv&&h("img",{src:fv,alt:"",onError:e=>{e.target.style.display="none"}}),h("span",null,dm||"—")),
+              ul.length>0&&h("div",{className:"flag-row"},...ul.map(k=>{const uu=ULKELER.find(x=>x.kod===k);return uu?h("span",{key:k,className:"flag"},uu.flag+" "+uu.ad):null;})),
+              rm.notlar&&h("div",{style:{fontSize:11,color:"var(--t3)",marginTop:2}},rm.notlar)
+            );
+          })),
+          h("div",{className:"dtit",style:{marginTop:12}},"📝 Notlar"),
+          uData.notlar?h("div",{className:"note-box"},uData.notlar):h("span",{style:{fontSize:13,color:"var(--t3)"}},"Not eklenmedi"),
+          h("div",{className:"dact"},h("button",{className:"btn btn-g btn-s",onClick:()=>onEdit(uData)},"✏ Düzenle"),h("button",{className:"btn btn-d btn-s",onClick:()=>onDel(uData.id,uData.urun)},"🗑 Sil"))
+        ),
+        h("div",{className:"ds"},h(GorselUploader,{urunId:uData.id,gorseller:uData.gorseller||[],onRefresh:refreshThis})),
+        h(AiAnaliz,{u:uData,onUpdate:refreshThis})
+      ))
+    );
+  }
+
+  function Modal({urun,onClose,onSave}){
+    const [f,setF]=useState(()=>urun?{...E0,...urun,rakip_magazalar:urun.rakip_magazalar||[]}:{...E0});
+    const s=k=>v=>setF(p=>({...p,[k]:v}));
+    const inp=(k,ph,type)=>h("input",{className:"fc",type:type||"text",value:f[k]||"",onChange:e=>s(k)(e.target.value),placeholder:ph||""});
+    const sel=(k,opts,ph)=>h("select",{className:"fc",value:f[k]||"",onChange:e=>s(k)(e.target.value)},h("option",{value:""},ph||"Seç..."),...opts.map(o=>h("option",{key:o,value:o},o)));
+    async function submit(){if(!f.urun&&!f.link){alert("Ürün adı veya link gerekli.");return;}await onSave(f,urun?.id);onClose();}
+    return h("div",{className:"ov",onClick:e=>{if(e.target===e.currentTarget)onClose()}},
+      h("div",{className:"modal"},
+        h("div",{className:"mhdr"},h("span",{className:"mtit"},urun?"Ürünü Düzenle":"Yeni Ürün Ekle"),h("button",{className:"xbtn",onClick:onClose},"×")),
+        h("div",{className:"mbdy"},
+          h("div",{className:"fsect"},h("div",{className:"fsect-t"},"Temel Bilgiler"),h("div",{className:"fgrid"},
+            h("div",{className:"fg full"},h("label",null,"Ürün Adı"),inp("urun","ör. Anti-cellulite masaj aleti")),
+            h("div",{className:"fg"},h("label",null,"Reklam Linki"),inp("link","https://www.facebook.com/ads/library/...")),
+            h("div",{className:"fg"},h("label",null,"Tedarikçi Linki"),inp("tedarik_link","AliExpress, CJ, Zendrop linki")),
+            h("div",{className:"fg full"},h("label",null,"Görsel URL (opsiyonel)"),inp("gorsel","https://...")),
+            h("div",{className:"fg"},h("label",null,"Niş"),sel("nis",NISLER)),
+            h("div",{className:"fg"},h("label",null,"Ürün Tipi"),sel("tip",TIPLER)),
+            h("div",{className:"fg"},h("label",null,"Durum"),sel("durum",DURUM_O)),
+            h("div",{className:"fg"},h("label",null,"Tedarik Kaynağı"),sel("kaynak",KAYNAK_O))
+          )),
+          h("div",{className:"fsect"},h("div",{className:"fsect-t"},"Fiyatlandırma"),h("div",{className:"fgrid"},
+            h("div",{className:"fg"},h("label",null,"Satış Fiyatı"),h("div",{className:"price-row"},h("select",{className:"fc price-cur",value:f.para_birimi||"USD",onChange:e=>s("para_birimi")(e.target.value)},...PARA_O.map(o=>h("option",{key:o,value:o},o))),h("input",{className:"fc",type:"number",min:"0",step:"0.01",value:f.satis_fiyat||"",onChange:e=>s("satis_fiyat")(e.target.value),placeholder:"0.00"}))),
+            h("div",{className:"fg"},h("label",null,"Alış Fiyatı"),h("div",{className:"price-row"},h("select",{className:"fc price-cur",value:f.para_birimi||"USD",onChange:e=>s("para_birimi")(e.target.value)},...PARA_O.map(o=>h("option",{key:o,value:o},o))),h("input",{className:"fc",type:"number",min:"0",step:"0.01",value:f.alis_fiyat||"",onChange:e=>s("alis_fiyat")(e.target.value),placeholder:"0.00"}))),
+            h("div",{className:"fg"},h("label",null,"Fiyat Aralığı (Pazar)"),sel("fiyat",FIYAT_O,"Seç (opsiyonel)"))
+          )),
+          h("div",{className:"fsect"},h("div",{className:"fsect-t"},"Pazar Analizi"),h("div",{className:"fgrid"},
+            h("div",{className:"fg"},h("label",null,"FOMO"),sel("fomo",FOMO_O)),
+            h("div",{className:"fg"},h("label",null,"Rakip Süre"),sel("rakip",RAKIP_O)),
+            h("div",{className:"fg"},h("label",null,"Kreatif (25+)"),sel("kreatif",KREATIF_O)),
+            h("div",{className:"fg"},h("label",null,"1:6 Başa Baş"),sel("breakeven",BE_O))
+          )),
+          h("div",{className:"fsect"},h("div",{className:"fsect-t"},"Rakip Mağazalar"),h(RakipEditor,{value:f.rakip_magazalar,onChange:s("rakip_magazalar")})),
+          h("div",{className:"fsect",style:{marginBottom:0}},h("div",{className:"fsect-t"},"Notlar"),h("div",{className:"fg full"},h("label",null,"Gözlemler"),h("textarea",{className:"fc",value:f.notlar||"",onChange:e=>s("notlar")(e.target.value),rows:3,placeholder:"Gözlemler, fikirler..."})))
+        ),
+        h("div",{className:"mfoot"},h("button",{className:"btn btn-g",onClick:onClose},"İptal"),h("button",{className:"btn btn-p",onClick:submit},urun?"Güncelle":"Kaydet"))
+      )
+    );
+  }
+
+  function App(){
+    const [urunler,setUrunler]=useState([]);const [modal,setModal]=useState(null);
+    const [search,setSearch]=useState("");const [fnis,setFnis]=useState("");const [ftip,setFtip]=useState("");const [fdurum,setFdurum]=useState("");const [loading,setLoading]=useState(true);
+    async function load(){setLoading(true);const params=new URLSearchParams();if(search)params.set("arama",search);if(fnis)params.set("nis",fnis);if(ftip)params.set("tip",ftip);if(fdurum)params.set("durum",fdurum);setUrunler(await api.get("/api/urunler?"+params));setLoading(false);}
+    useEffect(()=>{load();},[search,fnis,ftip,fdurum]);
+    async function handleSave(f,eid){if(eid)await api.put(`/api/urunler/${eid}`,{...f,kullanici_id:user.id});else await api.post("/api/urunler",{...f,kullanici_id:user.id});showToast(eid?"Güncellendi ✓":"Kaydedildi ✓");load();}
+    async function handleDel(id,ad){if(!confirm(`"${ad}" silinsin mi?`))return;await fetch(`/api/urunler/${id}`,{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({kullanici_id:user.id})});showToast("Silindi");load();}
+    return h("div",null,
+      h("div",{className:"ph"},
+        h("div",null,h("div",{className:"ptit"},"Ürün Listesi"),h("div",{className:"psub"},urunler.length+" kayıt")),
+        h("div",{className:"pact"},h("a",{href:"/api/export/csv",className:"btn btn-g",style:{textDecoration:"none"}},"⬇ CSV"),h("button",{className:"btn btn-p",onClick:()=>setModal("ekle")},"+ Ekle"))
+      ),
+      h("div",{className:"tb"},
+        h("div",{className:"sw"},h("span",{className:"si"},"🔍"),h("input",{className:"sinput",placeholder:"Ürün, not, niş ara...",value:search,onChange:e=>setSearch(e.target.value)})),
+        h("select",{className:"fsel",value:fnis,onChange:e=>setFnis(e.target.value)},h("option",{value:""},"Tüm Nişler"),...NISLER.map(n=>h("option",{key:n,value:n},n))),
+        h("select",{className:"fsel",value:ftip,onChange:e=>setFtip(e.target.value)},h("option",{value:""},"Tüm Tipler"),...TIPLER.map(t=>h("option",{key:t,value:t},t))),
+        h("select",{className:"fsel",value:fdurum,onChange:e=>setFdurum(e.target.value)},h("option",{value:""},"Tüm Durumlar"),...DURUM_O.map(d=>h("option",{key:d,value:d},d)))
+      ),
+      loading?h("div",{style:{textAlign:"center",padding:"4rem",color:"var(--t3)"}},"Yükleniyor..."):
+      urunler.length===0?h("div",{className:"empty"},h("div",{className:"empty-ico"},"🔍"),h("h3",null,"Henüz ürün yok"),h("p",null,"+ Ekle butonuna tıkla")):
+      h("div",null,
+        h("div",{style:{fontSize:12,color:"var(--t3)",marginBottom:8}},"▾ simgesine tıkla → detay, rakipler, görsel yükleme ve AI analiz"),
+        h("div",{className:"plist"},...urunler.map(u=>h(PRow,{key:u.id,u,onEdit:u2=>setModal(u2),onDel:handleDel,onRefresh:load})))
+      ),
+      (modal==="ekle"||modal?.id)&&h(Modal,{urun:modal==="ekle"?null:modal,onClose:()=>setModal(null),onSave:handleSave})
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+}
+</script>
+</body>
+</html>

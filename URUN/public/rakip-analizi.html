@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>XCOMMERCE — Rakip Mağaza</title>
+<link rel="stylesheet" href="/main.css"/>
+</head>
+<body>
+<button class="hamburger" id="ham">☰</button>
+<div id="nav-root"></div>
+<div class="app">
+  <div></div>
+  <main class="main" id="root"></main>
+</div>
+
+<script src="/nav.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+const user = requireAuth();
+if (user) {
+  renderSidebar();
+  const {useState,useEffect,useRef} = React, h = React.createElement;
+
+  const NISLER=["Hobi","Sağlık","Bebek & Anne","Mutfak","Güzellik","Kadın","Araba & Motor","Ev & Dekor","Spor","Teknoloji","Evcil Hayvan"];
+  const TIPLER=["Sorun Çözen","Wow Ürün + Hediyelik"];
+  const DURUM_O=["Araştırılıyor","Test Aşamasında","Onaylandı","Reddedildi"];
+
+  // Quick-add modal for adding a Shopify product to our list
+  function QuickAddModal({urun, siteUrl, onClose, onSave}){
+    const [f,setF]=useState({
+      urun: urun.title||"",
+      link: "",
+      tedarik_link: `https://${siteUrl}/products/${urun.handle}`,
+      gorsel: urun.gorsel_url||"",
+      nis: "",tip: "",durum: "Araştırılıyor",kaynak: "Diğer",
+      fomo: "",rakip: "",kreatif: "",breakeven: "",
+      fiyat: "",para_birimi: "USD",
+      satis_fiyat: urun.fiyat||"",
+      alis_fiyat: "",notlar: `Kaynak: ${siteUrl}\nVendor: ${urun.vendor||"—"}\nTip: ${urun.product_type||"—"}`,
+      rakip_magazalar:[]
+    });
+    const s=k=>v=>setF(p=>({...p,[k]:v}));
+    async function submit(){
+      await onSave({...f,kullanici_id:user.id});
+      showToast("Listeye eklendi ✓");
+      onClose();
+    }
+    return h("div",{className:"ov",onClick:e=>{if(e.target===e.currentTarget)onClose()}},
+      h("div",{className:"modal",style:{maxWidth:520}},
+        h("div",{className:"mhdr"},
+          h("span",{className:"mtit"},"Listeye Ekle"),
+          h("button",{className:"xbtn",onClick:onClose},"×")
+        ),
+        h("div",{className:"mbdy"},
+          urun.gorsel_url&&h("div",{style:{width:80,height:80,borderRadius:8,overflow:"hidden",marginBottom:12,border:"1px solid var(--b1)"}},
+            h("img",{src:urun.gorsel_url,alt:"",style:{width:"100%",height:"100%",objectFit:"cover"}})
+          ),
+          h("div",{className:"fgrid"},
+            h("div",{className:"fg full"},h("label",null,"Ürün Adı"),h("input",{className:"fc",value:f.urun,onChange:e=>s("urun")(e.target.value)})),
+            h("div",{className:"fg"},h("label",null,"Niş"),h("select",{className:"fc",value:f.nis,onChange:e=>s("nis")(e.target.value)},h("option",{value:""},"Seç..."),...NISLER.map(o=>h("option",{key:o,value:o},o)))),
+            h("div",{className:"fg"},h("label",null,"Durum"),h("select",{className:"fc",value:f.durum,onChange:e=>s("durum")(e.target.value)},...DURUM_O.map(o=>h("option",{key:o,value:o},o)))),
+            h("div",{className:"fg"},h("label",null,"Satış Fiyatı"),h("div",{style:{display:"flex",gap:6}},
+              h("select",{className:"fc",style:{width:80},value:f.para_birimi,onChange:e=>s("para_birimi")(e.target.value)},["USD","EUR","TRY"].map(o=>h("option",{key:o,value:o},o))),
+              h("input",{className:"fc",type:"number",value:f.satis_fiyat,onChange:e=>s("satis_fiyat")(e.target.value),placeholder:"0.00"})
+            )),
+            h("div",{className:"fg"},h("label",null,"Tedarikçi Linki"),h("input",{className:"fc",value:f.tedarik_link,onChange:e=>s("tedarik_link")(e.target.value)})),
+            h("div",{className:"fg full"},h("label",null,"Notlar"),h("textarea",{className:"fc",value:f.notlar,onChange:e=>s("notlar")(e.target.value),rows:3}))
+          )
+        ),
+        h("div",{className:"mfoot"},
+          h("button",{className:"btn btn-g",onClick:onClose},"İptal"),
+          h("button",{className:"btn btn-p",onClick:submit},"+ Listeye Ekle")
+        )
+      )
+    );
+  }
+
+  function UrunCard({urun, siteUrl, onAdd}){
+    const [showAdd,setShowAdd]=useState(false);
+    const fiyatNum=parseFloat(urun.fiyat);
+    const compareNum=parseFloat(urun.compare_fiyat);
+    const hasDiscount=compareNum&&compareNum>fiyatNum;
+    const tags=(urun.tags||"").split(",").map(t=>t.trim()).filter(Boolean).slice(0,3);
+    return h("div",{className:"urun-card"},
+      h("div",{className:"urun-img"},
+        urun.gorsel_url
+          ?h("img",{src:urun.gorsel_url,alt:urun.title,loading:"lazy",onError:e=>{e.target.parentElement.innerHTML='<div class="urun-no-img">📦</div>'}})
+          :h("div",{className:"urun-no-img"},"📦")
+      ),
+      h("div",{className:"urun-body"},
+        h("div",{className:"urun-title"},urun.title),
+        h("div",{className:"urun-price"},
+          h("span",{className:"urun-price-main"},fiyatNum?"€"+fiyatNum.toFixed(2):"—"),
+          hasDiscount&&h("span",{className:"urun-price-compare"},"€"+compareNum.toFixed(2))
+        ),
+        h("div",{className:"urun-meta"},
+          urun.vendor&&h("span",null,"🏷 "+urun.vendor),
+          urun.product_type&&h("span",null,"📂 "+urun.product_type),
+          h("span",{className:urun.available?"avail-yes":"avail-no"},urun.available?"✓ Stokta":"✗ Tükendi"),
+          h("span",null,"➕ "+fmtDate(urun.created_at)),
+          h("span",null,"🔄 "+fmtDate(urun.updated_at))
+        ),
+        tags.length>0&&h("div",{className:"urun-tags"},...tags.map(t=>h("span",{key:t,className:"urun-tag"},t))),
+        h("button",{className:"urun-add-btn",onClick:()=>setShowAdd(true)},"+ Araştırma Listesine Ekle")
+      ),
+      showAdd&&h(QuickAddModal,{urun,siteUrl,onClose:()=>setShowAdd(false),onSave:async f=>{await api.post("/api/urunler",f);setShowAdd(false);}})
+    );
+  }
+
+  function SiteCard({site, onDelete, onRefresh}){
+    const [open,setOpen]=useState(false);
+    const [refreshing,setRefreshing]=useState(false);
+    const [search,setSearch]=useState("");
+    const urunler=site.urunler||[];
+    const filtered=search?urunler.filter(u=>(u.title||"").toLowerCase().includes(search.toLowerCase())||(u.vendor||"").toLowerCase().includes(search.toLowerCase())||(u.product_type||"").toLowerCase().includes(search.toLowerCase())):urunler;
+
+    async function doRefresh(e){
+      e.stopPropagation();
+      setRefreshing(true);
+      const r=await api.post("/api/rakip-magazalar/ara",{url:site.url});
+      if(r.error)showToast("⚠ "+r.error,"error");
+      else{showToast("Yenilendi ✓");onRefresh();}
+      setRefreshing(false);
+    }
+
+    const fav=`https://www.google.com/s2/favicons?domain=${site.url}&sz=64`;
+
+    return h("div",{className:"site-card"},
+      h("div",{className:"site-header",onClick:()=>setOpen(p=>!p)},
+        h("div",{className:"site-fav"},h("img",{src:fav,alt:"",onError:e=>{e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%23252a35'/%3E%3C/svg%3E"}})),
+        h("div",{className:"site-info"},
+          h("div",{className:"site-url"},site.url),
+          h("div",{className:"site-meta"},
+            h("span",null,"📦 "+site.urun_sayisi+" ürün"),
+            site.son_cekme&&h("span",null,"🕐 "+ago(site.son_cekme))
+          )
+        ),
+        h("div",{className:"site-actions"},
+          h("button",{className:"btn btn-g btn-s",onClick:doRefresh,disabled:refreshing},refreshing?h("span",{className:"spin"},"⟳"):"⟳ Yenile"),
+          h("button",{className:"btn btn-d btn-s",onClick:e=>{e.stopPropagation();if(confirm(site.url+" silinsin mi?"))onDelete(site.id)}},"✕"),
+          h("button",{className:"site-expand-btn"+(open?" open":""),onClick:e=>{e.stopPropagation();setOpen(p=>!p)}},"▾")
+        )
+      ),
+      open&&h("div",null,
+        urunler.length>0&&h("div",{style:{padding:"0 20px 12px",display:"flex",gap:8,alignItems:"center"}},
+          h("div",{style:{position:"relative",flex:1}},
+            h("span",{style:{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"var(--t3)",pointerEvents:"none"}},"🔍"),
+            h("input",{style:{width:"100%",background:"var(--bg3)",border:"1px solid var(--b1)",borderRadius:"var(--r)",padding:"8px 12px 8px 32px",color:"var(--t1)",fontSize:13,fontFamily:"inherit"},placeholder:`${urunler.length} ürün içinde ara...`,value:search,onChange:e=>setSearch(e.target.value)})
+          ),
+          h("span",{style:{fontSize:12,color:"var(--t3)",whiteSpace:"nowrap"}},filtered.length+" sonuç")
+        ),
+        filtered.length===0
+          ?h("div",{style:{textAlign:"center",padding:"2rem",color:"var(--t3)",fontSize:13}},search?"Sonuç bulunamadı":"Bu sitede ürün yok")
+          :h("div",{className:"urun-grid"},...filtered.map(u=>h(UrunCard,{key:u.id,urun:u,siteUrl:site.url})))
+      )
+    );
+  }
+
+  function App(){
+    const [siteler,setSiteler]=useState([]);
+    const [loading,setLoading]=useState(true);
+    const [fetching,setFetching]=useState(false);
+    const [url,setUrl]=useState("");
+    const [error,setError]=useState("");
+    const inputRef=useRef();
+
+    async function load(){
+      setLoading(true);
+      setSiteler(await api.get("/api/rakip-magazalar"));
+      setLoading(false);
+    }
+    useEffect(()=>{load();},[]);
+
+    async function ara(){
+      const u=url.trim();
+      if(!u){setError("URL gir");return;}
+      setFetching(true);setError("");
+      const r=await api.post("/api/rakip-magazalar/ara",{url:u});
+      if(r.error){setError(r.error);}
+      else{setUrl("");showToast(`${r.url} — ${r.urun_sayisi} ürün çekildi ✓`);await load();}
+      setFetching(false);
+    }
+
+    async function delSite(id){
+      await api.del(`/api/rakip-magazalar/${id}`);
+      showToast("Silindi");
+      setSiteler(siteler.filter(s=>s.id!==id));
+    }
+
+    const totalUrunler=siteler.reduce((s,x)=>s+(x.urun_sayisi||0),0);
+
+    return h("div",null,
+      h("div",{className:"ph"},
+        h("div",null,
+          h("div",{className:"ptit"},"🕵️ Rakip Mağaza Analizi"),
+          h("div",{className:"psub"},"Shopify mağazalarını analiz et, ürünleri keşfet")
+        )
+      ),
+
+      // Stats
+      siteler.length>0&&h("div",{className:"sg",style:{gridTemplateColumns:"repeat(3,1fr)"}},
+        h("div",{className:"sc"},h("div",{className:"slbl"},"Takip Edilen"),h("div",{className:"sval"},siteler.length),h("div",{className:"ssub"},"mağaza")),
+        h("div",{className:"sc ac"},h("div",{className:"slbl"},"Toplam Ürün"),h("div",{className:"sval"},totalUrunler),h("div",{className:"ssub"},"keşfedildi")),
+        h("div",{className:"sc gr"},h("div",{className:"slbl"},"Son Güncelleme"),h("div",{className:"sval",style:{fontSize:18}},siteler[0]?ago(siteler[0].son_cekme):"—"),h("div",{className:"ssub"},"en son çekim"))
+      ),
+
+      // Search bar
+      h("div",{style:{marginBottom:"1.5rem"}},
+        h("div",{className:"rak-search"},
+          h("span",{className:"rak-input-icon"},"🌐"),
+          h("input",{ref:inputRef,className:"rak-input",placeholder:"velskn.com veya https://example.myshopify.com",value:url,onChange:e=>{setUrl(e.target.value);setError("");},onKeyDown:e=>{if(e.key==="Enter")ara();}}),
+          h("button",{className:"rak-btn",onClick:ara,disabled:fetching},fetching?h("span",{className:"spin"},"⟳ Çekiliyor..."):"🔍 Analiz Et")
+        ),
+        error&&h("div",{style:{color:"var(--red)",fontSize:"var(--fs-sm)",background:"var(--red-b)",borderRadius:"var(--r)",padding:"10px 14px",marginTop:8}},"⚠ "+error),
+        h("div",{style:{fontSize:12,color:"var(--t3)",marginTop:8}},"Shopify kullanan herhangi bir mağazanın URL'sini gir (örn: velskn.com, gymshark.com)")
+      ),
+
+      // Sites list
+      loading?h("div",{style:{textAlign:"center",padding:"4rem",color:"var(--t3)"}},"Yükleniyor..."):
+      siteler.length===0?h("div",{className:"empty"},
+        h("div",{className:"empty-ico"},"🕵️"),
+        h("h3",null,"Henüz analiz yapılmadı"),
+        h("p",null,"Yukarıya bir Shopify mağaza URL'si gir ve Analiz Et'e bas")
+      ):
+      h("div",null,...siteler.map(s=>h(SiteCard,{key:s.id,site:s,onDelete:delSite,onRefresh:load})))
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+}
+</script>
+</body>
+</html>
