@@ -100,26 +100,130 @@ if (user) {
     );
   }
 
+  // SW yardımcıları
+  function normDomain(url){if(!url)return"";return url.replace(/^https?:\/\//i,"").replace(/\/+$/,"").toLowerCase().trim();}
+  function fmtNum(n){if(!n&&n!==0)return"—";if(n>=1e6)return(n/1e6).toFixed(1)+"M";if(n>=1e3)return(n/1e3).toFixed(1)+"K";return n.toLocaleString("tr-TR");}
+  function fmtPct(v){if(v==null)return"—";return(v*100).toFixed(1)+"%";}
+  function fmtTime(s){if(!s)return"—";return Math.floor(s/60)+"d "+Math.floor(s%60)+"s";}
+
+  function calcSwScore(swMap){
+    // swMap: {domain: apiResponse}
+    const entries=Object.values(swMap).filter(d=>d&&d.traffic&&!d.error);
+    if(!entries.length)return null;
+    const scores=entries.map(data=>{
+      let s=0;const t=data.traffic;
+      const visits=Object.values(t?.Visits||{});
+      const avg=visits.length?visits.reduce((a,b)=>a+b,0)/visits.length:0;
+      if(avg>100000)s+=30;else if(avg>50000)s+=20;else if(avg>10000)s+=15;else if(avg>1000)s+=5;
+      const br=t?.Engagement?.BounceRate;
+      if(br!=null){if(br<0.4)s+=20;else if(br<0.55)s+=12;else if(br<0.7)s+=5;}
+      const org=t?.Sources?.Search||0;
+      if(org>0.5)s+=20;else if(org>0.3)s+=12;else if(org>0.1)s+=5;
+      const rank=data.rank?.GlobalRank;
+      if(rank){if(rank<100000)s+=20;else if(rank<500000)s+=12;else if(rank<2000000)s+=6;}
+      const sorted=Object.entries(t?.Visits||{}).sort((a,b)=>a[0].localeCompare(b[0]));
+      if(sorted.length>=2&&sorted[sorted.length-1][1]>sorted[0][1])s+=10;
+      return Math.min(100,s);
+    });
+    return Math.round(scores.reduce((a,b)=>a+b,0)/scores.length);
+  }
+
+  function swScoreClr(s){return s>=70?"var(--grn)":s>=40?"var(--amb)":"var(--red)";}
+
+  function CompChipSw({rm, swD}){
+    let ul=[];try{const p=JSON.parse(rm.ulkeler||"[]");ul=Array.isArray(p)?p:[];}catch(e){}
+    const fv=rm.url?getFav(rm.url):null;
+    const dm=rm.url?getDom(rm.url):rm.url;
+    const href=rm.url?(rm.url.startsWith("http")?rm.url:"https://"+rm.url):"#";
+    const t=swD?.traffic;
+    const visits=t?.Visits?Object.values(t.Visits):[];
+    const avgV=visits.length?visits.reduce((a,b)=>a+b,0)/visits.length:0;
+    return h("div",{style:{background:"var(--bg4)",border:"1px solid var(--b1)",borderRadius:8,padding:"7px 10px",marginBottom:6}},
+      h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}},
+        h("a",{href,target:"_blank",rel:"noreferrer",style:{textDecoration:"none",display:"flex",alignItems:"center",gap:5,color:"var(--t1)",fontWeight:600,fontSize:13}},
+          fv&&h("img",{src:fv,alt:"",style:{width:14,height:14,borderRadius:2},onError:e=>{e.target.style.display="none"}}),
+          h("span",null,dm||"—")
+        ),
+        h("a",{href:"/rakip-analizi",style:{fontSize:11,color:"var(--acc)",textDecoration:"none"}},"→ Detay")
+      ),
+      ul.length>0&&h("div",{className:"flag-row",style:{marginTop:4}},...ul.map(k=>{const uu=ULKELER.find(x=>x.kod===k);return uu?h("span",{key:k,className:"flag"},uu.flag+" "+uu.ad):null;})),
+      // SW özet satırı
+      swD==="loading"&&h("div",{style:{fontSize:11,color:"var(--t3)",marginTop:5}},"📊 SW yükleniyor..."),
+      swD&&swD!=="loading"&&swD.error&&h("div",{style:{fontSize:11,color:"var(--t3)",marginTop:5}},"📊 SW veri yok"),
+      swD&&swD!=="loading"&&!swD.error&&t&&h("div",{style:{display:"flex",gap:10,marginTop:5,flexWrap:"wrap"}},
+        avgV>0&&h("span",{style:{fontSize:11,color:"var(--cyn)"}},"👥 "+fmtNum(Math.round(avgV))+"/ay"),
+        t.Engagement?.BounceRate!=null&&h("span",{style:{fontSize:11,color:t.Engagement.BounceRate<0.5?"var(--grn)":"var(--amb)"}},"↩ "+fmtPct(t.Engagement.BounceRate)),
+        swD.rank?.GlobalRank&&h("span",{style:{fontSize:11,color:"var(--pur)"}},"#"+fmtNum(swD.rank.GlobalRank))
+      ),
+      rm.notlar&&h("div",{style:{fontSize:11,color:"var(--t3)",marginTop:3}},rm.notlar)
+    );
+  }
+
   function PRow({u,onEdit,onDel,onRefresh}){
-    const [open,setOpen]=useState(false);const [uData,setUData]=useState(u);
-    const score=calcScore(uData);const fav=uData.link?getFav(uData.link):null;const durClr=DURUM_CLR[uData.durum]||"var(--t3)";
+    const [open,setOpen]=useState(false);
+    const [uData,setUData]=useState(u);
+    const [swMap,setSwMap]=useState({}); // {domain: data|"loading"|"error"}
+
+    const score=calcScore(uData);
+    const swScore=calcSwScore(swMap);
+    const fav=uData.link?getFav(uData.link):null;
+    const durClr=DURUM_CLR[uData.durum]||"var(--t3)";
     const rms=Array.isArray(uData.rakip_magazalar)?uData.rakip_magazalar:[];
+
+    // Detay açılınca rakiplerin SW verisini önbellekten çek
+    useEffect(()=>{
+      if(!open||!rms.length)return;
+      rms.forEach(rm=>{
+        if(!rm.url)return;
+        const domain=normDomain(rm.url);
+        if(!domain||swMap[domain]!==undefined)return;
+        setSwMap(p=>({...p,[domain]:"loading"}));
+        api.get("/api/similarweb/"+encodeURIComponent(domain))
+          .then(d=>setSwMap(p=>({...p,[domain]:d.error?"error":d})))
+          .catch(()=>setSwMap(p=>({...p,[domain]:"error"})));
+      });
+    },[open]);
+
     async function refreshThis(){const fresh=await api.get("/api/urunler");const f=fresh.find(x=>x.id===u.id);if(f)setUData(f);onRefresh();}
     const thumb=uData.gorsel?h("img",{src:uData.gorsel,alt:"",onError:e=>{e.target.style.display="none"}}):fav?h("img",{src:fav,alt:"",style:{width:22,height:22,borderRadius:3},onError:e=>{e.target.style.display="none"}}):h("span",null,uData.nis==="Sağlık"?"💊":uData.nis==="Mutfak"?"🍳":uData.nis==="Güzellik"?"💄":uData.nis==="Bebek & Anne"?"👶":uData.nis==="Araba & Motor"?"🚗":"📦");
     const fiyatG=uData.satis_fiyat?`${uData.satis_fiyat} ${uData.para_birimi||"USD"}`:null;
+
     return h("div",{className:"prow"},
       h("div",{className:"mrow"+(open?" open":""),onClick:()=>setOpen(p=>!p)},
         h("button",{className:"xbtn2"+(open?" open":""),onClick:e=>{e.stopPropagation();setOpen(p=>!p)}},"▾"),
         h("div",{className:"pimg"},thumb),
-        h("div",{className:"pname"},h("div",{className:"pname-t"},uData.urun||"—"),h("div",{className:"pname-s"},uData.durum&&h("span",{style:{display:"flex",alignItems:"center",gap:4}},h("span",{className:"sdot",style:{background:durClr}}),uData.durum),fiyatG&&h("span",{style:{color:"var(--grn)",fontWeight:600}},fiyatG),uData.kaynak&&h("span",{style:{color:"var(--t3)"}},"· "+uData.kaynak))),
+        h("div",{className:"pname"},
+          h("div",{className:"pname-t"},uData.urun||"—"),
+          h("div",{className:"pname-s"},
+            uData.durum&&h("span",{style:{display:"flex",alignItems:"center",gap:4}},h("span",{className:"sdot",style:{background:durClr}}),uData.durum),
+            fiyatG&&h("span",{style:{color:"var(--grn)",fontWeight:600}},fiyatG),
+            uData.kaynak&&h("span",{style:{color:"var(--t3)"}},"· "+uData.kaynak)
+          )
+        ),
         h("div",{className:"cc"},h("span",{style:{fontSize:12,color:"var(--t2)",textAlign:"center"}},uData.nis||"—")),
         h("div",{className:"cc"},bdg(uData.tip,true)),
         h("div",{style:{display:"flex",flexDirection:"column",gap:3,alignItems:"center"}},bdg(uData.fomo,true),bdg(uData.rakip,true)),
         h("div",{className:"cc"},bdg(uData.breakeven,true)),
         h("div",{className:"cc"},bdg(uData.fiyat,true)),
-        h("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",gap:1}},h("div",{className:"scnum",style:{color:scoreClr(score)}},score),h("div",{className:"sclbl"},"puan"))
+        // İki puan yan yana
+        h("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",gap:3}},
+          h("div",{style:{display:"flex",gap:6,alignItems:"flex-end"}},
+            h("div",{style:{textAlign:"center"}},
+              h("div",{className:"scnum",style:{color:scoreClr(score),fontSize:15}},score),
+              h("div",{className:"sclbl"},"ürün")
+            ),
+            swScore!==null&&h("div",{style:{textAlign:"center"}},
+              h("div",{className:"scnum",style:{color:swScoreClr(swScore),fontSize:13}},swScore),
+              h("div",{className:"sclbl",style:{color:"var(--cyn)"}},"SW")
+            )
+          ),
+          swScore!==null&&h("div",{style:{fontSize:9,color:"var(--t3)",textAlign:"center"}},
+            "toplam "+(Math.round((score+swScore)/2))
+          )
+        )
       ),
       open&&h("div",{className:"detail"},h("div",{className:"detail-grid"},
+        /* COL 1: Analiz */
         h("div",{className:"ds"},
           h("div",{className:"dtit"},"📊 Analiz"),
           h("div",{className:"drow"},h("span",{className:"dk"},"FOMO"),bdg(uData.fomo)),
@@ -129,30 +233,44 @@ if (user) {
           uData.satis_fiyat&&h("div",{className:"drow"},h("span",{className:"dk"},"Satış"),h("span",{className:"dv",style:{color:"var(--grn)",fontWeight:600}},uData.satis_fiyat+" "+(uData.para_birimi||"USD"))),
           uData.alis_fiyat&&h("div",{className:"drow"},h("span",{className:"dk"},"Alış"),h("span",{className:"dv"},uData.alis_fiyat+" "+(uData.para_birimi||"USD"))),
           h("div",{style:{marginTop:8}}),
-          h("div",{className:"dk",style:{marginBottom:5}},"Skor"),
-          h("div",{style:{display:"flex",alignItems:"center",gap:9}},h("div",{className:"sbar-wrap"},h("div",{className:"sbar",style:{width:score+"%",background:scoreClr(score)}})),h("span",{style:{fontSize:13,fontWeight:700,color:scoreClr(score),minWidth:32}},score+"/100")),
+          h("div",{className:"dk",style:{marginBottom:5}},"Ürün Puanı"),
+          h("div",{style:{display:"flex",alignItems:"center",gap:9}},
+            h("div",{className:"sbar-wrap"},h("div",{className:"sbar",style:{width:score+"%",background:scoreClr(score)}})),
+            h("span",{style:{fontSize:13,fontWeight:700,color:scoreClr(score),minWidth:32}},score+"/100")
+          ),
+          swScore!==null&&h("div",null,
+            h("div",{className:"dk",style:{marginBottom:5,marginTop:8}},"SW Rakip Puanı"),
+            h("div",{style:{display:"flex",alignItems:"center",gap:9}},
+              h("div",{className:"sbar-wrap"},h("div",{className:"sbar",style:{width:swScore+"%",background:swScoreClr(swScore)}})),
+              h("span",{style:{fontSize:13,fontWeight:700,color:swScoreClr(swScore),minWidth:32}},swScore+"/100")
+            ),
+            h("div",{className:"dk",style:{marginBottom:5,marginTop:8}},"Toplam Ortalama"),
+            h("div",{style:{display:"flex",alignItems:"center",gap:9}},
+              h("div",{className:"sbar-wrap"},h("div",{className:"sbar",style:{width:Math.round((score+swScore)/2)+"%",background:scoreClr(Math.round((score+swScore)/2))}})),
+              h("span",{style:{fontSize:13,fontWeight:700,color:scoreClr(Math.round((score+swScore)/2)),minWidth:32}},Math.round((score+swScore)/2)+"/100")
+            )
+          ),
           h("div",{style:{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}},
             uData.link&&h("a",{href:uData.link,target:"_blank",rel:"noreferrer",className:"btn btn-g btn-s",style:{textDecoration:"none",fontSize:12}},"→ Reklam"),
             uData.tedarik_link&&h("a",{href:uData.tedarik_link.startsWith("http")?uData.tedarik_link:"https://"+uData.tedarik_link,target:"_blank",rel:"noreferrer",className:"btn btn-cyn btn-s",style:{textDecoration:"none",fontSize:12}},"🛒 Tedarikçi")
           )
         ),
+        /* COL 2: Rakip Mağazalar + SW mini */
         h("div",{className:"ds"},
           h("div",{className:"dtit"},"🏪 Rakip Mağazalar"),
-          rms.length===0?h("span",{style:{fontSize:13,color:"var(--t3)"}},"Rakip eklenmedi"):
-          h("div",{style:{display:"flex",flexDirection:"column",gap:6}},...rms.map((rm,i)=>{
-            let ul=[];try{const p=JSON.parse(rm.ulkeler||"[]");ul=Array.isArray(p)?p:[];}catch(e){}
-            const fv=rm.url?getFav(rm.url):null;const dm=rm.url?getDom(rm.url):rm.url;
-            const href=rm.url?(rm.url.startsWith("http")?rm.url:"https://"+rm.url):"#";
-            return h("a",{key:i,href,target:"_blank",rel:"noreferrer",className:"comp-chip"},
-              h("div",{className:"comp-top"},fv&&h("img",{src:fv,alt:"",onError:e=>{e.target.style.display="none"}}),h("span",null,dm||"—")),
-              ul.length>0&&h("div",{className:"flag-row"},...ul.map(k=>{const uu=ULKELER.find(x=>x.kod===k);return uu?h("span",{key:k,className:"flag"},uu.flag+" "+uu.ad):null;})),
-              rm.notlar&&h("div",{style:{fontSize:11,color:"var(--t3)",marginTop:2}},rm.notlar)
-            );
-          })),
+          rms.length===0
+            ?h("span",{style:{fontSize:13,color:"var(--t3)"}},"Rakip eklenmedi")
+            :h("div",null,...rms.map((rm,i)=>
+                h(CompChipSw,{key:i,rm,swD:swMap[normDomain(rm.url)]})
+              )),
           h("div",{className:"dtit",style:{marginTop:12}},"📝 Notlar"),
           uData.notlar?h("div",{className:"note-box"},uData.notlar):h("span",{style:{fontSize:13,color:"var(--t3)"}},"Not eklenmedi"),
-          h("div",{className:"dact"},h("button",{className:"btn btn-g btn-s",onClick:()=>onEdit(uData)},"✏ Düzenle"),h("button",{className:"btn btn-d btn-s",onClick:()=>onDel(uData.id,uData.urun)},"🗑 Sil"))
+          h("div",{className:"dact"},
+            h("button",{className:"btn btn-g btn-s",onClick:()=>onEdit(uData)},"✏ Düzenle"),
+            h("button",{className:"btn btn-d btn-s",onClick:()=>onDel(uData.id,uData.urun)},"🗑 Sil")
+          )
         ),
+        /* COL 3: Görseller */
         h("div",{className:"ds"},h(GorselUploader,{urunId:uData.id,gorseller:uData.gorseller||[],onRefresh:refreshThis})),
         h(AiAnaliz,{u:uData,onUpdate:refreshThis})
       ))

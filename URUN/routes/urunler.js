@@ -11,6 +11,21 @@ function getUrunFull(id) {
   return u;
 }
 
+// Rakip URL'lerini rakip_siteler tablosuna otomatik ekle (non-blocking)
+function autoSyncRakipSiteler(rakip_magazalar) {
+  if (!Array.isArray(rakip_magazalar)) return;
+  setImmediate(() => {
+    rakip_magazalar.forEach(rm => {
+      if (!rm.url) return;
+      const norm = rm.url.replace(/^https?:\/\//i,"").replace(/\/+$/,"").toLowerCase().trim();
+      if (!norm) return;
+      try {
+        db.prepare("INSERT OR IGNORE INTO rakip_siteler (url, urun_sayisi) VALUES (?,?)").run(norm, 0);
+      } catch(e) {}
+    });
+  });
+}
+
 router.get("/", (req, res) => {
   const { nis, tip, durum, arama } = req.query;
   let sql = "SELECT * FROM urunler WHERE 1=1"; const p = [];
@@ -35,6 +50,7 @@ router.post("/", (req, res) => {
   if (Array.isArray(rakip_magazalar)) {
     const ins = db.prepare("INSERT INTO rakip_magazalar (urun_id,url,ulkeler,notlar) VALUES (?,?,?,?)");
     rakip_magazalar.forEach(x => ins.run(uid, x.url, JSON.stringify(x.ulkeler||[]), x.notlar||""));
+    autoSyncRakipSiteler(rakip_magazalar); // ← otomatik sync
   }
   if (kullanici_id) db.prepare("INSERT INTO aktivite (kullanici_id,eylem,urun_adi) VALUES (?,?,?)").run(kullanici_id, "ekledi", urun);
   res.json({ id: uid });
@@ -48,6 +64,7 @@ router.put("/:id", (req, res) => {
     db.prepare("DELETE FROM rakip_magazalar WHERE urun_id=?").run(req.params.id);
     const ins = db.prepare("INSERT INTO rakip_magazalar (urun_id,url,ulkeler,notlar) VALUES (?,?,?,?)");
     rakip_magazalar.forEach(x => ins.run(req.params.id, x.url, JSON.stringify(x.ulkeler||[]), x.notlar||""));
+    autoSyncRakipSiteler(rakip_magazalar); // ← otomatik sync
   }
   if (kullanici_id) db.prepare("INSERT INTO aktivite (kullanici_id,eylem,urun_adi) VALUES (?,?,?)").run(kullanici_id, "güncelledi", urun);
   res.json({ message: "ok" });
